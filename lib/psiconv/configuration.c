@@ -336,8 +336,14 @@ void psiconv_config_read(const char *extra_config_files,
   pathptr = path;
   while (strlen(pathptr)) {
     /* Isolate the next filename */
-    filename_len = (index(pathptr,':')?(index(pathptr,':') - pathptr):
+    /* (OM_modif) filename_len = (index(pathptr,':')?(index(pathptr,':') - pathptr):
 	                               strlen(pathptr));
+    */
+	  
+	filename_len = (strchr(pathptr, ':') ? (strchr(pathptr, ':') - pathptr)
+                                     : strlen(pathptr));
+
+	  
     filename = malloc(filename_len + 1);
     filename = strncpy(filename,pathptr,filename_len);
     filename[filename_len] = 0;
