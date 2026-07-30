@@ -1,0 +1,71 @@
+name: Build psiconv for Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install MSYS2 and MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            make
+            autoconf
+            automake
+            libtool
+            mingw-w64-ucrt-x86_64-gcc
+
+      - name: Configure static Windows build
+        run: |
+          rm -f config.cache config.log config.status
+          ./configure \
+            --host=x86_64-w64-mingw32 \
+            --with-imagemagick=no \
+            --disable-shared \
+            --enable-static \
+            CFLAGS="-O2" \
+            LDFLAGS="-static"
+
+      - name: Compile psiconv
+        run: |
+          make -j2
+
+      - name: Collect executable
+        run: |
+          mkdir -p dist
+          EXE="program/psiconv/psiconv.exe"
+          if [ ! -f "$EXE" ]; then
+            EXE="program/psiconv/.libs/psiconv.exe"
+          fi
+          test -f "$EXE"
+          cp "$EXE" dist/psiconv.exe
+          cp COPYING dist/COPYING.txt
+          cat > dist/README.txt <<'TXT'
+          psiconv pour Windows 64 bits
+
+          Afficher l'aide :
+              psiconv.exe --help
+
+          Cette compilation désactive ImageMagick et privilégie un exécutable statique.
+          TXT
+          file dist/psiconv.exe || true
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: psiconv-windows-x64
+          path: dist/
