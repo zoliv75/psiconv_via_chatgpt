@@ -3,18 +3,21 @@ name: Build psiconv for Windows
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
 
 jobs:
   build-windows:
     runs-on: windows-latest
+
     defaults:
       run:
         shell: msys2 {0}
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install MSYS2 and MinGW-w64
         uses: msys2/setup-msys2@v2
@@ -22,50 +25,90 @@ jobs:
           msystem: UCRT64
           update: true
           install: >-
-            git
-            make
+            base-devel
             autoconf
             automake
             libtool
+            make
+            pkgconf
+            file
             mingw-w64-ucrt-x86_64-gcc
 
-      - name: Configure static Windows build
+      - name: Display compiler information
+        run: |
+          echo "MSYSTEM=$MSYSTEM"
+          pwd
+          gcc --version
+          make --version
+          autoreconf --version
+
+      - name: Regenerate build files
         run: |
           rm -f config.cache config.log config.status
+          autoreconf -fiv
+
+      - name: Configure Windows build
+        run: |
           ./configure \
             --host=x86_64-w64-mingw32 \
+            --build=x86_64-pc-msys \
             --with-imagemagick=no \
             --disable-shared \
             --enable-static \
-            CFLAGS="-O2" \
-            LDFLAGS="-static"
+            CFLAGS="-O2"
 
       - name: Compile psiconv
         run: |
-          make -j2
+          make V=1 -j2
 
-      - name: Collect executable
+      - name: Locate executable
         run: |
+          echo "Recherche des exécutables produits :"
+          find . -type f -iname "*.exe" -print
+
           mkdir -p dist
+
           EXE="program/psiconv/psiconv.exe"
+
           if [ ! -f "$EXE" ]; then
             EXE="program/psiconv/.libs/psiconv.exe"
           fi
-          test -f "$EXE"
+
+          if [ ! -f "$EXE" ]; then
+            echo "ERREUR : psiconv.exe est introuvable."
+            exit 1
+          fi
+
           cp "$EXE" dist/psiconv.exe
-          cp COPYING dist/COPYING.txt
-          cat > dist/README.txt <<'TXT'
+
+          if [ -f COPYING ]; then
+            cp COPYING dist/COPYING.txt
+          fi
+
+          cat > dist/README.txt <<'EOF'
           psiconv pour Windows 64 bits
 
-          Afficher l'aide :
+          Pour afficher l'aide :
+
               psiconv.exe --help
 
-          Cette compilation désactive ImageMagick et privilégie un exécutable statique.
-          TXT
-          file dist/psiconv.exe || true
+          La prise en charge d'ImageMagick est désactivée.
+          EOF
+
+          file dist/psiconv.exe
+
+      - name: Test executable
+        shell: pwsh
+        run: |
+          Get-Item ".\dist\psiconv.exe"
+          & ".\dist\psiconv.exe" --help
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Le programme a renvoyé le code $LASTEXITCODE pendant le test."
+          }
 
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
           name: psiconv-windows-x64
-          path: dist/
+          path: dist
+          if-no-files-found: error
