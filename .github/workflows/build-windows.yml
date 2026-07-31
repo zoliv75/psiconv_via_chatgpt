@@ -47,6 +47,20 @@ jobs:
           rm -f config.cache config.log config.status
           autoreconf -fiv
 
+      - name: Apply Windows compatibility patches (OM)
+        working-directory: psiconv-source
+        run: |
+          sed -i 's/index(/strchr(/g' lib/psiconv/configuration.c
+
+          sed -i 's/gen_xhtml\.c gen_html4\.c/gen_xhtml.c gen_html4.c gen_html5.c/g' \
+            program/psiconv/Makefile.am \
+            program/psiconv/Makefile.in
+
+          echo "Vérification des corrections :"
+          grep -n "strchr(pathptr" lib/psiconv/configuration.c
+          grep -n "gen_html5.c" program/psiconv/Makefile.am
+          grep -n "gen_html5.c" program/psiconv/Makefile.in
+          
       - name: Configure Windows build
         run: |
           ./configure \
